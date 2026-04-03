@@ -117,7 +117,7 @@ The first line of the data set contains:
 - **T** (`1 ≤ T ≤ 10⁶`) — the time limit in seconds
 - **C** (`1 ≤ C ≤ 10²`) — the number of vehicles in the fleet
 - **S** (`0 ≤ S < N`) — the index of the depot junction
-- **W** (`W ≥ 0`) — the water waste penalty factor used in the scoring formula
+- **α** (`0 ≤ α ≤ 1`) — the weight balancing coverage vs. water efficiency in the scoring formula
 
 This is followed by **N** lines describing individual junctions. The i-th such line contains two decimal numbers representing the geographic coordinates of the junction.
 
@@ -135,7 +135,7 @@ The last line of the input contains **C** characters separated by spaces, each b
 ### Example Input
 
 ```
-6 10 300 3 0 1
+6 10 300 3 0 0.5
 0 1 2 30 200 M 10
 1 3 2 25 150 O 10
 1 2 2 35 300 M 20
@@ -203,19 +203,41 @@ Then, for each vehicle (in order from vehicle 1 to vehicle C), the file must con
 
 ## Scoring
 
-Your score is computed using the following formula:
+Your score is computed as a weighted sum of two normalized objectives, both to be **maximized**:
 
 ```
-Score = Total length of cleaned streets – W × Total water wasted
+Score = α × Coverage + (1 − α) × Efficiency
 ```
 
 Where:
 
-- **Total length of cleaned streets** = the sum of lengths (in meters) of all distinct mandatory and optional streets that were cleaned.
-- **Total water wasted** = the sum, over all cleaned streets, of `(vehicle capacity – street requirement) × street length in km`.
-- **W** = a weighting factor that controls how much water waste is penalized. Its value is defined per problem instance and is given in the input file.
+- **Coverage** measures how much of the cleanable street network you cleaned, normalized to [0, 1]:
 
-A higher score reflects both better coverage and more efficient water use. The optimal strategy cleans all mandatory streets, cleans as many optional streets as possible, and assigns the smallest sufficient vehicle to each street.
+  ```
+  Coverage = (total length of cleaned streets) / L_max
+  ```
+
+  **L_max** = the sum of lengths of all mandatory and optional streets in the instance. This is the theoretical maximum length you could clean.
+
+- **Efficiency** measures how little water you wasted, normalized to [0, 1]:
+
+  ```
+  Efficiency = 1 − (total water wasted) / W_max
+  ```
+
+  **Total water wasted** = the sum, over all cleaned streets, of `(vehicle capacity − street requirement) × street length in km`.
+
+  **W_max** = the total water that would be wasted if every mandatory and optional street were cleaned by a Large vehicle (30 L/km). This is the worst-case waste and serves as the normalization upper bound:
+
+  ```
+  W_max = Σ (30 − Rⱼ) × Lⱼ / 1000    for all mandatory and optional streets j
+  ```
+
+  An efficiency of 1 means zero waste (every street cleaned by the smallest sufficient vehicle). An efficiency of 0 means maximum possible waste.
+
+- **α** (`0 ≤ α ≤ 1`) = a weighting factor that controls the trade-off between coverage and efficiency. Its value is defined per problem instance and is given in the input file. When α = 1, only coverage matters. When α = 0, only efficiency matters.
+
+A higher score is always better. The optimal strategy cleans all mandatory streets, cleans as many optional streets as possible, and assigns the smallest sufficient vehicle to each street.
 
 **Validity:** A submission is invalid (and scores zero) if any mandatory street is left uncleaned, if any vehicle does not start and end at the depot, if any vehicle exceeds the time limit, or if any vehicle cleans a street whose requirement exceeds its capacity.
 
@@ -235,15 +257,31 @@ Based on the example input and submission above:
 All 3 mandatory streets are cleaned. ✔  
 All vehicles return to the depot within 300 seconds. ✔
 
+**Normalization bounds:**
+
+```
+L_max = 200 + 150 + 300 + 100 + 250 + 350 + 400 = 1,750 meters
+
+W_max = (30−10)×0.200 + (30−10)×0.150 + (30−20)×0.300 + (30−10)×0.100
+      + (30−30)×0.250 + (30−20)×0.350 + (30−30)×0.400
+      = 4.0 + 3.0 + 3.0 + 2.0 + 0 + 3.5 + 0
+      = 15.5 liters
+```
+
 **Score calculation:**
 
 ```
 Total length cleaned = 200 + 150 + 300 + 100 + 250 + 400 = 1,400 meters
 Total water wasted = 0 liters
-Score = 1,400 – 1 × 0 = 1,400
+
+Coverage  = 1,400 / 1,750 = 0.800
+Efficiency = 1 − 0 / 15.5 = 1.000
+
+With α = 0.5:
+Score = 0.5 × 0.800 + 0.5 × 1.000 = 0.900
 ```
 
-This solution achieves zero waste because every street is cleaned by the smallest vehicle capable of handling it. Street S6 (optional, 350 m) was left uncleaned due to time constraints.
+This solution achieves perfect efficiency (zero waste) because every street is cleaned by the smallest vehicle capable of handling it. Coverage is 0.8 because Street S6 (optional, 350 m) was left uncleaned due to time constraints. A perfect score of 1.0 would require cleaning all streets with zero waste.
 
 ### Example Timeline
 
