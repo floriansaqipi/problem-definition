@@ -649,6 +649,129 @@ def add_optional_streets(
         remaining_ids.discard(action.street_id)
 
 
+def clone_plans(plans: Sequence[VehiclePlan]) -> List[VehiclePlan]:
+    return [
+        VehiclePlan(
+            vehicle_type=plan.vehicle_type,
+            capacity=plan.capacity,
+            actions=plan.actions[:],
+            route_time=plan.route_time,
+        )
+        for plan in plans
+    ]
+
+
+def scheduled_street_ids(plans: Sequence[VehiclePlan]) -> set[int]:
+    return {action.street_id for plan in plans for action in plan.actions}
+
+
+def remove_optional_actions(
+    instance: Instance,
+    cache: PathCache,
+    plans: List[VehiclePlan],
+    street_ids: set[int],
+) -> None:
+    for plan in plans:
+        if not any(action.street_id in street_ids for action in plan.actions):
+            continue
+        plan.actions = [action for action in plan.actions if action.street_id not in street_ids]
+        plan.route_time = route_time(instance, cache, plan.actions)
+
+
+def weak_optional_candidates(
+    instance: Instance,
+    cache: PathCache,
+    plans: Sequence[VehiclePlan],
+    rng: random.Random,
+) -> List[Tuple[float, int]]:
+    candidates: List[Tuple[float, int]] = []
+    seen: set[int] = set()
+
+    for plan in plans:
+        for index, action in enumerate(plan.actions):
+            street = instance.streets[action.street_id]
+            if not street.optional() or street.id in seen:
+                continue
+
+            delta = removal_delta(instance, cache, plan, index)
+            if math.isinf(delta):
+                continue
+
+            freed_time = max(1.0, -delta)
+            gain = street_gain(instance, street, plan.capacity)
+            weakness = gain / freed_time
+            weakness *= rng.uniform(0.90, 1.10)
+            candidates.append((weakness, street.id))
+            seen.add(street.id)
+
+    candidates.sort(key=lambda item: item[0])
+    return candidates
+
+
+def improve_optional_lns(
+    instance: Instance,
+    cache: PathCache,
+    plans: List[VehiclePlan],
+    rng: random.Random,
+    top_k: int,
+    max_optional_candidates: int,
+    iterations: int,
+    destroy_count: int,
+    deadline: Optional[float],
+) -> List[VehiclePlan]:
+    if iterations <= 0 or destroy_count <= 0 or instance.alpha <= 1e-12:
+        return plans
+
+    best_plans = clone_plans(plans)
+    best_solution = materialize_solution(instance, cache, best_plans)
+    if not best_solution.valid:
+        return plans
+
+    for _ in range(iterations):
+        if deadline is not None and time.monotonic() >= deadline:
+            break
+
+        weak = weak_optional_candidates(instance, cache, best_plans, rng)
+        if not weak:
+            break
+
+        window = weak[: min(len(weak), max(destroy_count * 4, destroy_count))]
+        rng.shuffle(window)
+        removed = {street_id for _, street_id in window[:destroy_count]}
+        if not removed:
+            break
+
+        trial_plans = clone_plans(best_plans)
+        remove_optional_actions(instance, cache, trial_plans, removed)
+        if any(math.isinf(plan.route_time) for plan in trial_plans):
+            continue
+
+        for plan in trial_plans:
+            rebuild_plan_nearest(instance, cache, plan, rng, randomized=True)
+
+        already_cleaned = scheduled_street_ids(trial_plans)
+        add_optional_streets(
+            instance,
+            cache,
+            trial_plans,
+            already_cleaned,
+            rng,
+            top_k,
+            max_optional_candidates,
+        )
+
+        for plan in trial_plans:
+            rebuild_plan_nearest(instance, cache, plan, rng, randomized=True)
+        reassign_to_better_vehicle(instance, cache, trial_plans)
+
+        trial_solution = materialize_solution(instance, cache, trial_plans)
+        if trial_solution.valid and trial_solution.score > best_solution.score + 1e-12:
+            best_plans = trial_plans
+            best_solution = trial_solution
+
+    return best_plans
+
+
 def rebuild_plan_nearest(
     instance: Instance,
     cache: PathCache,
@@ -906,6 +1029,9 @@ def construct_solution(
     top_k: int,
     max_optional_candidates: int,
     mandatory_mode: str,
+    optional_lns_iterations: int,
+    optional_lns_destroy_count: int,
+    deadline: Optional[float],
 ) -> Optional[MaterializedSolution]:
     rng = random.Random(seed)
     randomized = attempt > 0
@@ -964,6 +1090,17 @@ def construct_solution(
             rebuild_plan_nearest(instance, cache, plan, rng, randomized)
         reassign_to_better_vehicle(instance, cache, plans)
         add_optional_streets(instance, cache, plans, cleaned, rng, active_top_k, max_optional_candidates)
+        plans = improve_optional_lns(
+            instance=instance,
+            cache=cache,
+            plans=plans,
+            rng=rng,
+            top_k=max(1, top_k),
+            max_optional_candidates=max_optional_candidates,
+            iterations=optional_lns_iterations,
+            destroy_count=optional_lns_destroy_count,
+            deadline=deadline,
+        )
 
     return materialize_solution(instance, cache, plans)
 
@@ -1143,9 +1280,12 @@ def solve(
     top_k: int,
     max_optional_candidates: int,
     mandatory_mode: str = "standard",
+    optional_lns_iterations: int = 0,
+    optional_lns_destroy_count: int = 3,
 ) -> MaterializedSolution:
     cache = PathCache(instance)
     started = time.monotonic()
+    deadline = started + seconds if seconds > 0 else None
     best: Optional[MaterializedSolution] = None
     best_any: Optional[MaterializedSolution] = None
     attempt = 0
@@ -1164,6 +1304,9 @@ def solve(
             top_k=top_k,
             max_optional_candidates=max_optional_candidates,
             mandatory_mode=mandatory_mode,
+            optional_lns_iterations=max(0, optional_lns_iterations),
+            optional_lns_destroy_count=max(1, optional_lns_destroy_count),
+            deadline=deadline,
         )
 
         if solution is not None:
@@ -1194,6 +1337,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--top-k", type=int, default=4, help="randomized choice width after the first deterministic run")
     parser.add_argument("--max-optional-candidates", type=int, default=20000, help="cap optional streets considered on large instances")
     parser.add_argument("--mandatory-mode", choices=["standard", "role"], default="standard", help="mandatory construction strategy")
+    parser.add_argument("--optional-lns-iterations", type=int, default=0, help="optional-street LNS iterations after greedy construction")
+    parser.add_argument("--optional-lns-destroy-count", type=int, default=3, help="optional scheduled streets removed per LNS iteration")
     parser.add_argument("--quiet", action="store_true", help="suppress summary on stderr")
     return parser.parse_args()
 
@@ -1233,6 +1378,8 @@ def main() -> int:
         top_k=max(1, args.top_k),
         max_optional_candidates=max(0, args.max_optional_candidates),
         mandatory_mode=args.mandatory_mode,
+        optional_lns_iterations=max(0, args.optional_lns_iterations),
+        optional_lns_destroy_count=max(1, args.optional_lns_destroy_count),
     )
     write_solution(args.output, solution)
 

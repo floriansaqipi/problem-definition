@@ -1,0 +1,3 @@
+approach,run_id,timestamp,input_file,output_file,seed,seconds,restarts,top_k,max_optional_candidates,valid,score,cleaned_count,message,runtime_seconds
+lns_tuned,run_0006_20260620-134940,2026-06-20T13:49:40,training\m.txt,outputs\lns_tuned\run_0006_20260620-134940\m_seed014.txt,14,60.0,0,6,50000,True,0.729121,515,valid,78.422
+lns_tuned,run_0006_20260620-134940,2026-06-20T13:49:40,training\m.txt,outputs\lns_tuned\run_0006_20260620-134940\m_seed015.txt,15,60.0,0,6,50000,True,0.721251,505,valid,77.828

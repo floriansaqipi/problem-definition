@@ -1,0 +1,28 @@
+{
+  "approach": "lns_tuned",
+  "run_id": "run_0004_20260620-134524",
+  "timestamp": "2026-06-20T13:45:24",
+  "seed": 1,
+  "seeds": [
+    11,
+    12,
+    13,
+    14,
+    15
+  ],
+  "config": {
+    "seconds": 8.0,
+    "restarts": 0,
+    "top_k": 6,
+    "max_optional_candidates": 50000,
+    "mandatory_mode": "role",
+    "optional_lns_iterations": 4,
+    "optional_lns_destroy_count": 4
+  },
+  "input_dir": "training",
+  "output_root": "outputs",
+  "solution_extension": ".txt",
+  "instances": [
+    "training\\train_n.txt"
+  ]
+}

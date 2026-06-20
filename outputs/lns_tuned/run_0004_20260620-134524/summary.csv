@@ -1,0 +1,6 @@
+approach,run_id,timestamp,input_file,output_file,seed,seconds,restarts,top_k,max_optional_candidates,valid,score,cleaned_count,message,runtime_seconds
+lns_tuned,run_0004_20260620-134524,2026-06-20T13:45:24,training\train_n.txt,outputs\lns_tuned\run_0004_20260620-134524\train_n_seed011.txt,11,8.0,0,6,50000,True,0.946968,24,valid,8.000
+lns_tuned,run_0004_20260620-134524,2026-06-20T13:45:24,training\train_n.txt,outputs\lns_tuned\run_0004_20260620-134524\train_n_seed012.txt,12,8.0,0,6,50000,True,0.946968,24,valid,8.000
+lns_tuned,run_0004_20260620-134524,2026-06-20T13:45:24,training\train_n.txt,outputs\lns_tuned\run_0004_20260620-134524\train_n_seed013.txt,13,8.0,0,6,50000,True,0.946968,24,valid,8.000
+lns_tuned,run_0004_20260620-134524,2026-06-20T13:45:24,training\train_n.txt,outputs\lns_tuned\run_0004_20260620-134524\train_n_seed014.txt,14,8.0,0,6,50000,True,0.946968,24,valid,8.000
+lns_tuned,run_0004_20260620-134524,2026-06-20T13:45:24,training\train_n.txt,outputs\lns_tuned\run_0004_20260620-134524\train_n_seed015.txt,15,8.0,0,6,50000,True,0.946968,24,valid,8.000

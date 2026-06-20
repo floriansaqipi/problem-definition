@@ -1,0 +1,2 @@
+approach,run_id,timestamp,input_file,output_file,seed,seconds,restarts,top_k,max_optional_candidates,valid,score,cleaned_count,message,runtime_seconds
+lns_tuned,run_0001_20260620-134001,2026-06-20T13:40:01,training\train_a.txt,outputs\lns_tuned\run_0001_20260620-134001\train_a.txt,11,3.0,0,6,50000,True,0.669634,33,valid,3.000

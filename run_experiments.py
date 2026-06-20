@@ -40,6 +40,8 @@ class ApproachPreset:
     top_k: int
     max_optional_candidates: int
     mandatory_mode: str = "standard"
+    optional_lns_iterations: int = 0
+    optional_lns_destroy_count: int = 3
 
 
 PRESETS: Dict[str, ApproachPreset] = {
@@ -75,6 +77,15 @@ PRESETS: Dict[str, ApproachPreset] = {
         max_optional_candidates=50000,
         mandatory_mode="role",
     ),
+    "lns_tuned": ApproachPreset(
+        seconds=60.0,
+        restarts=0,
+        top_k=6,
+        max_optional_candidates=50000,
+        mandatory_mode="role",
+        optional_lns_iterations=4,
+        optional_lns_destroy_count=4,
+    ),
 }
 
 
@@ -91,6 +102,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--top-k", type=int, help="override preset randomized choice width")
     parser.add_argument("--max-optional-candidates", type=int, help="override preset optional candidate cap")
     parser.add_argument("--mandatory-mode", choices=["standard", "role"], help="override mandatory construction mode")
+    parser.add_argument("--optional-lns-iterations", type=int, help="override optional-street LNS iteration count")
+    parser.add_argument("--optional-lns-destroy-count", type=int, help="override optional streets removed per LNS iteration")
     parser.add_argument(
         "--solution-extension",
         default="txt",
@@ -118,6 +131,16 @@ def resolve_config(args: argparse.Namespace) -> ApproachPreset:
             else preset.max_optional_candidates
         ),
         mandatory_mode=args.mandatory_mode if args.mandatory_mode is not None else preset.mandatory_mode,
+        optional_lns_iterations=(
+            args.optional_lns_iterations
+            if args.optional_lns_iterations is not None
+            else preset.optional_lns_iterations
+        ),
+        optional_lns_destroy_count=(
+            args.optional_lns_destroy_count
+            if args.optional_lns_destroy_count is not None
+            else preset.optional_lns_destroy_count
+        ),
     )
 
 
@@ -186,6 +209,8 @@ def write_metadata(
             "top_k": config.top_k,
             "max_optional_candidates": config.max_optional_candidates,
             "mandatory_mode": config.mandatory_mode,
+            "optional_lns_iterations": config.optional_lns_iterations,
+            "optional_lns_destroy_count": config.optional_lns_destroy_count,
         },
         "input_dir": str(args.input_dir),
         "output_root": str(args.output_root),
@@ -350,6 +375,8 @@ def run_instance(
             top_k=max(1, config.top_k),
             max_optional_candidates=max(0, config.max_optional_candidates),
             mandatory_mode=config.mandatory_mode,
+            optional_lns_iterations=max(0, config.optional_lns_iterations),
+            optional_lns_destroy_count=max(1, config.optional_lns_destroy_count),
         )
         solve.write_solution(output_path, solution)
         solve.check_submission_structure(output_path)

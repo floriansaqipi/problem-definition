@@ -1,0 +1,43 @@
+{
+  "approach": "grasp",
+  "run_id": "run_0007_20260620-134651",
+  "timestamp": "2026-06-20T13:46:51",
+  "seed": 1,
+  "seeds": [
+    21,
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40
+  ],
+  "config": {
+    "seconds": 8.0,
+    "restarts": 0,
+    "top_k": 4,
+    "max_optional_candidates": 20000,
+    "mandatory_mode": "standard",
+    "optional_lns_iterations": 0,
+    "optional_lns_destroy_count": 3
+  },
+  "input_dir": "training",
+  "output_root": "outputs",
+  "solution_extension": ".txt",
+  "instances": [
+    "training\\train_a.txt"
+  ]
+}

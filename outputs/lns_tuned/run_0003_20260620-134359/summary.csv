@@ -1,0 +1,11 @@
+approach,run_id,timestamp,input_file,output_file,seed,seconds,restarts,top_k,max_optional_candidates,valid,score,cleaned_count,message,runtime_seconds
+lns_tuned,run_0003_20260620-134359,2026-06-20T13:43:59,training\train_a.txt,outputs\lns_tuned\run_0003_20260620-134359\train_a_seed011.txt,11,8.0,0,6,50000,True,0.669634,33,valid,8.000
+lns_tuned,run_0003_20260620-134359,2026-06-20T13:43:59,training\train_a.txt,outputs\lns_tuned\run_0003_20260620-134359\train_a_seed012.txt,12,8.0,0,6,50000,True,0.658174,33,valid,8.000
+lns_tuned,run_0003_20260620-134359,2026-06-20T13:43:59,training\train_a.txt,outputs\lns_tuned\run_0003_20260620-134359\train_a_seed013.txt,13,8.0,0,6,50000,True,0.669887,34,valid,8.000
+lns_tuned,run_0003_20260620-134359,2026-06-20T13:43:59,training\train_a.txt,outputs\lns_tuned\run_0003_20260620-134359\train_a_seed014.txt,14,8.0,0,6,50000,True,0.660639,33,valid,8.000
+lns_tuned,run_0003_20260620-134359,2026-06-20T13:43:59,training\train_a.txt,outputs\lns_tuned\run_0003_20260620-134359\train_a_seed015.txt,15,8.0,0,6,50000,True,0.664717,32,valid,8.000
+lns_tuned,run_0003_20260620-134359,2026-06-20T13:43:59,training\train_a.txt,outputs\lns_tuned\run_0003_20260620-134359\train_a_seed016.txt,16,8.0,0,6,50000,True,0.662857,33,valid,8.000
+lns_tuned,run_0003_20260620-134359,2026-06-20T13:43:59,training\train_a.txt,outputs\lns_tuned\run_0003_20260620-134359\train_a_seed017.txt,17,8.0,0,6,50000,True,0.662857,33,valid,8.000
+lns_tuned,run_0003_20260620-134359,2026-06-20T13:43:59,training\train_a.txt,outputs\lns_tuned\run_0003_20260620-134359\train_a_seed018.txt,18,8.0,0,6,50000,True,0.665906,34,valid,8.000
+lns_tuned,run_0003_20260620-134359,2026-06-20T13:43:59,training\train_a.txt,outputs\lns_tuned\run_0003_20260620-134359\train_a_seed019.txt,19,8.0,0,6,50000,True,0.653688,32,valid,8.015
+lns_tuned,run_0003_20260620-134359,2026-06-20T13:43:59,training\train_a.txt,outputs\lns_tuned\run_0003_20260620-134359\train_a_seed020.txt,20,8.0,0,6,50000,True,0.669887,34,valid,8.000
