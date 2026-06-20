@@ -181,7 +181,8 @@ def parse_instance(path: Path) -> Instance:
     alpha = float(header[5])
 
     street_start = 1
-    if len(lines) >= 1 + n + m + 1:
+    has_coordinate_block = False
+    if len(lines) >= 1 + n + 1:
         coordinate_block = True
         for line in lines[1 : 1 + n]:
             parts = line.split()
@@ -196,6 +197,11 @@ def parse_instance(path: Path) -> Instance:
                 break
         if coordinate_block and len(lines[1 + n].split()) == 7:
             street_start = 1 + n
+            has_coordinate_block = True
+
+    available_street_rows = len(lines) - street_start - 1
+    if available_street_rows < m and has_coordinate_block and available_street_rows > 0:
+        m = available_street_rows
 
     if len(lines) < street_start + m + 1:
         raise ValueError("input file does not contain all streets and vehicle line")

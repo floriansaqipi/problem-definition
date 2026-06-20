@@ -1,0 +1,2 @@
+approach,run_id,timestamp,input_file,output_file,seed,seconds,restarts,top_k,max_optional_candidates,valid,score,cleaned_count,message,runtime_seconds
+grasp,run_0004_20260620-124732,2026-06-20T12:47:32,training\train_gjilan.txt,outputs\grasp\run_0004_20260620-124732\train_gjilan.txt,1,5.0,0,4,20000,False,0.000000,0,error: street line 0 must contain 7 fields,0.000

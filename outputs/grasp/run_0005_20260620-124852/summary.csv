@@ -1,0 +1,2 @@
+approach,run_id,timestamp,input_file,output_file,seed,seconds,restarts,top_k,max_optional_candidates,valid,score,cleaned_count,message,runtime_seconds
+grasp,run_0005_20260620-124852,2026-06-20T12:48:52,training\train_gjilan.txt,outputs\grasp\run_0005_20260620-124852\train_gjilan.txt,1,5.0,0,4,20000,True,1.000000,22,valid,5.000

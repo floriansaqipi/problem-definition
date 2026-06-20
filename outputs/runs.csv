@@ -50,3 +50,6 @@ role_grasp,run_0005_20260620-123333,2026-06-20T12:33:33,training\train_n.txt,out
 role_grasp,run_0006_20260620-123520,2026-06-20T12:35:20,training\m.txt,outputs\role_grasp\run_0006_20260620-123520\m_seed001.txt,1,60.0,0,4,20000,True,0.719567,504,valid,71.937
 role_grasp,run_0006_20260620-123520,2026-06-20T12:35:20,training\m.txt,outputs\role_grasp\run_0006_20260620-123520\m_seed002.txt,2,60.0,0,4,20000,True,0.726531,501,valid,72.235
 role_grasp,run_0006_20260620-123520,2026-06-20T12:35:20,training\m.txt,outputs\role_grasp\run_0006_20260620-123520\m_seed003.txt,3,60.0,0,4,20000,True,0.721100,507,valid,74.109
+grasp,run_0004_20260620-124732,2026-06-20T12:47:32,training\train_gjilan.txt,outputs\grasp\run_0004_20260620-124732\train_gjilan.txt,1,5.0,0,4,20000,False,0.000000,0,error: street line 0 must contain 7 fields,0.000
+grasp,run_0005_20260620-124852,2026-06-20T12:48:52,training\train_gjilan.txt,outputs\grasp\run_0005_20260620-124852\train_gjilan.txt,1,5.0,0,4,20000,True,1.000000,22,valid,5.000
+grasp,run_0006_20260620-132142,2026-06-20T13:21:42,training\train_gjilan.txt,outputs\grasp\run_0006_20260620-132142\train_gjilan.txt,1,5.0,0,4,20000,True,1.000000,22,valid,5.000

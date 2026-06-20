@@ -1,0 +1,22 @@
+{
+  "approach": "grasp",
+  "run_id": "run_0006_20260620-132142",
+  "timestamp": "2026-06-20T13:21:42",
+  "seed": 1,
+  "seeds": [
+    1
+  ],
+  "config": {
+    "seconds": 5.0,
+    "restarts": 0,
+    "top_k": 4,
+    "max_optional_candidates": 20000,
+    "mandatory_mode": "standard"
+  },
+  "input_dir": "training",
+  "output_root": "outputs",
+  "solution_extension": ".txt",
+  "instances": [
+    "training\\train_gjilan.txt"
+  ]
+}
