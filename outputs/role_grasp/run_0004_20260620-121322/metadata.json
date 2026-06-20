@@ -1,0 +1,19 @@
+{
+  "approach": "role_grasp",
+  "run_id": "run_0004_20260620-121322",
+  "timestamp": "2026-06-20T12:13:22",
+  "seed": 1,
+  "config": {
+    "seconds": 5.0,
+    "restarts": 0,
+    "top_k": 4,
+    "max_optional_candidates": 20000,
+    "mandatory_mode": "role"
+  },
+  "input_dir": "training",
+  "output_root": "outputs",
+  "solution_extension": ".txt",
+  "instances": [
+    "training\\train_n.txt"
+  ]
+}

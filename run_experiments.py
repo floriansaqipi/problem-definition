@@ -4,11 +4,12 @@ import argparse
 import csv
 import json
 import re
+import shutil
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import solve
 
@@ -85,6 +86,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--instances", nargs="*", type=Path, help="specific instance files; defaults to all *.txt in --input-dir")
     parser.add_argument("--seconds", type=float, help="override preset seconds per instance")
     parser.add_argument("--seed", type=int, default=1, help="base random seed")
+    parser.add_argument("--seeds", nargs="+", type=int, help="run multiple seeds in one structured run folder")
     parser.add_argument("--restarts", type=int, help="override preset restart count; 0 means use seconds budget")
     parser.add_argument("--top-k", type=int, help="override preset randomized choice width")
     parser.add_argument("--max-optional-candidates", type=int, help="override preset optional candidate cap")
@@ -94,6 +96,12 @@ def parse_args() -> argparse.Namespace:
         default="txt",
         help="extension for generated solution files, for example txt or .out",
     )
+    parser.add_argument(
+        "--refresh-final",
+        action="store_true",
+        help="copy the best valid checked output per active instance from outputs/runs.csv into final/",
+    )
+    parser.add_argument("--final-dir", type=Path, default=Path("final"), help="folder refreshed by --refresh-final")
     parser.add_argument("--quiet", action="store_true", help="suppress per-instance console output")
     return parser.parse_args()
 
@@ -171,6 +179,7 @@ def write_metadata(
         "run_id": run_id,
         "timestamp": timestamp,
         "seed": args.seed,
+        "seeds": args.seeds if args.seeds else [args.seed],
         "config": {
             "seconds": config.seconds,
             "restarts": config.restarts,
@@ -203,6 +212,122 @@ def write_summary(path: Path, rows: List[Dict[str, object]]) -> None:
         writer.writerows(rows)
 
 
+def truthy(value: object) -> bool:
+    return str(value).strip().lower() in {"1", "true", "yes", "valid"}
+
+
+def resolve_existing_path(path_text: str) -> Path:
+    path = Path(path_text)
+    if path.is_absolute():
+        return path
+    return Path.cwd() / path
+
+
+def row_instance_stem(row: Dict[str, str]) -> str:
+    input_file = row.get("input_file", "")
+    return Path(input_file.replace("\\", "/")).stem
+
+
+def clear_directory(path: Path) -> None:
+    path.mkdir(parents=True, exist_ok=True)
+    for child in path.iterdir():
+        if child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+
+
+def find_best_checked_rows(
+    runs_csv: Path,
+    target_stems: List[str],
+) -> Tuple[Dict[str, Dict[str, str]], List[str]]:
+    if not runs_csv.exists():
+        raise FileNotFoundError(f"{runs_csv} does not exist")
+
+    targets = set(target_stems)
+    best: Dict[str, Dict[str, str]] = {}
+    skipped: List[str] = []
+
+    with runs_csv.open(newline="") as file:
+        reader = csv.DictReader(file)
+        for row in reader:
+            stem = row_instance_stem(row)
+            if stem not in targets:
+                continue
+            if not truthy(row.get("valid", "")):
+                continue
+
+            output_text = row.get("output_file", "")
+            source = resolve_existing_path(output_text)
+            if not source.exists():
+                skipped.append(f"{stem}: missing output {output_text}")
+                continue
+
+            try:
+                score = float(row.get("score", "0") or 0)
+            except ValueError:
+                skipped.append(f"{stem}: invalid score {row.get('score')}")
+                continue
+
+            try:
+                solve.check_submission_structure(source)
+            except Exception as exc:
+                skipped.append(f"{stem}: structure check failed for {output_text}: {exc}")
+                continue
+
+            current = best.get(stem)
+            current_score = float(current.get("score", "0") or 0) if current is not None else -1.0
+            current_timestamp = current.get("timestamp", "") if current is not None else ""
+            row_timestamp = row.get("timestamp", "")
+            if (
+                current is None
+                or score > current_score
+                or (score == current_score and row_timestamp >= current_timestamp)
+            ):
+                row["_resolved_output_file"] = str(source)
+                best[stem] = row
+
+    return best, skipped
+
+
+def refresh_final(args: argparse.Namespace) -> int:
+    instances = find_instances(args)
+    target_stems = [path.stem for path in instances]
+    best_rows, skipped = find_best_checked_rows(args.output_root / "runs.csv", target_stems)
+
+    missing = [stem for stem in target_stems if stem not in best_rows]
+    if missing:
+        print(f"missing valid checked run(s): {', '.join(missing)}")
+        if skipped and not args.quiet:
+            print("skipped candidates:")
+            for message in skipped[-20:]:
+                print(f"  {message}")
+        return 1
+
+    clear_directory(args.final_dir)
+
+    total = 0.0
+    for instance_path in instances:
+        stem = instance_path.stem
+        row = best_rows[stem]
+        source = Path(row["_resolved_output_file"])
+        target = args.final_dir / instance_path.name
+        shutil.copyfile(source, target)
+        solve.check_submission_structure(target)
+        score = float(row.get("score", "0") or 0)
+        total += score
+        if not args.quiet:
+            print(
+                f"{target}: score={score:.6f} seed={row.get('seed')} "
+                f"approach={row.get('approach')} source={row.get('output_file')}"
+            )
+
+    if not args.quiet:
+        print(f"final_dir={args.final_dir}")
+        print(f"total_score={total:.6f}")
+    return 0
+
+
 def run_instance(
     instance_path: Path,
     output_path: Path,
@@ -210,6 +335,7 @@ def run_instance(
     config: ApproachPreset,
     run_id: str,
     timestamp: str,
+    seed: int,
 ) -> Dict[str, object]:
     started = time.monotonic()
     output_text = str(output_path)
@@ -219,19 +345,19 @@ def run_instance(
         solution = solve.solve(
             instance=instance,
             seconds=config.seconds,
-            seed=args.seed,
+            seed=seed,
             restarts=config.restarts,
             top_k=max(1, config.top_k),
             max_optional_candidates=max(0, config.max_optional_candidates),
             mandatory_mode=config.mandatory_mode,
         )
         solve.write_solution(output_path, solution)
+        solve.check_submission_structure(output_path)
         cleaned_count = len({street_id for vehicle in solution.cleaned_by_vehicle for street_id in vehicle})
         valid = solution.valid
         score = solution.score
         message = solution.message
     except Exception as exc:  # Keep the run summary useful even if one instance fails.
-        output_text = ""
         cleaned_count = 0
         valid = False
         score = 0.0
@@ -244,7 +370,7 @@ def run_instance(
         "timestamp": timestamp,
         "input_file": str(instance_path),
         "output_file": output_text,
-        "seed": args.seed,
+        "seed": seed,
         "seconds": config.seconds,
         "restarts": config.restarts,
         "top_k": config.top_k,
@@ -259,9 +385,13 @@ def run_instance(
 
 def main() -> int:
     args = parse_args()
+    if args.refresh_final:
+        return refresh_final(args)
+
     config = resolve_config(args)
     instances = find_instances(args)
     solution_extension = normalize_extension(args.solution_extension)
+    seeds = args.seeds if args.seeds else [args.seed]
 
     approach_dir = args.output_root / args.approach
     run_id = next_run_id(approach_dir)
@@ -272,15 +402,18 @@ def main() -> int:
     write_metadata(run_dir, args, config, run_id, timestamp, instances)
 
     rows: List[Dict[str, object]] = []
-    for instance_path in instances:
-        output_path = run_dir / f"{instance_path.stem}{solution_extension}"
-        row = run_instance(instance_path, output_path, args, config, run_id, timestamp)
-        rows.append(row)
-        if not args.quiet:
-            print(
-                f"{instance_path.name}: valid={row['valid']} score={row['score']} "
-                f"cleaned={row['cleaned_count']} output={row['output_file']}"
-            )
+    use_seed_suffix = len(seeds) > 1
+    for seed in seeds:
+        for instance_path in instances:
+            suffix = f"_seed{seed:03d}" if use_seed_suffix else ""
+            output_path = run_dir / f"{instance_path.stem}{suffix}{solution_extension}"
+            row = run_instance(instance_path, output_path, args, config, run_id, timestamp, seed)
+            rows.append(row)
+            if not args.quiet:
+                print(
+                    f"{instance_path.name} seed={seed}: valid={row['valid']} score={row['score']} "
+                    f"cleaned={row['cleaned_count']} output={row['output_file']}"
+                )
 
     write_summary(run_dir / "summary.csv", rows)
     append_csv(args.output_root / "runs.csv", rows)

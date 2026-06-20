@@ -80,6 +80,28 @@ class MaterializedSolution:
     message: str
 
 
+@dataclass(frozen=True)
+class SubmissionStructureIssue:
+    path: Path
+    line_number: int
+    message: str
+    vehicle_index: Optional[int] = None
+    declared_count: Optional[int] = None
+    actual_count: Optional[int] = None
+
+    def __str__(self) -> str:
+        location = f"{self.path}:{self.line_number}"
+        if self.vehicle_index is None:
+            return f"{location}: {self.message}"
+        return f"{location}: vehicle {self.vehicle_index}: {self.message}"
+
+
+class SubmissionStructureError(ValueError):
+    def __init__(self, issues: Sequence[SubmissionStructureIssue]) -> None:
+        self.issues = list(issues)
+        super().__init__("\n".join(str(issue) for issue in self.issues))
+
+
 class PathCache:
     def __init__(self, instance: Instance) -> None:
         self.instance = instance
@@ -950,7 +972,7 @@ def fallback_quality(instance: Instance, solution: MaterializedSolution) -> Tupl
 def write_solution(path: Optional[Path], solution: MaterializedSolution) -> None:
     lines: List[str] = [str(len(solution.routes))]
     for route, cleaned in zip(solution.routes, solution.cleaned_by_vehicle):
-        lines.append(str(len(route)))
+        lines.append(str(max(0, len(route) - 1)))
         lines.append(" ".join(str(node) for node in route))
         lines.append(" ".join(str(street_id) for street_id in cleaned))
 
@@ -961,6 +983,150 @@ def write_solution(path: Optional[Path], solution: MaterializedSolution) -> None
 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
+
+
+def inspect_submission_structure(path: Path) -> List[SubmissionStructureIssue]:
+    lines = path.read_text().splitlines()
+    issues: List[SubmissionStructureIssue] = []
+
+    if not lines:
+        return [SubmissionStructureIssue(path, 1, "submission file is empty")]
+
+    try:
+        vehicle_count = int(lines[0].strip())
+    except ValueError:
+        return [SubmissionStructureIssue(path, 1, "first line must be the vehicle count")]
+
+    position = 1
+    for vehicle_index in range(vehicle_count):
+        if position + 2 >= len(lines):
+            issues.append(
+                SubmissionStructureIssue(
+                    path=path,
+                    line_number=position + 1,
+                    vehicle_index=vehicle_index,
+                    message="missing one or more of the 3 required vehicle lines",
+                )
+            )
+            return issues
+
+        count_line_number = position + 1
+        route_line_number = position + 2
+        try:
+            declared_count = int(lines[position].strip())
+        except ValueError:
+            issues.append(
+                SubmissionStructureIssue(
+                    path=path,
+                    line_number=count_line_number,
+                    vehicle_index=vehicle_index,
+                    message="route node count line must be an integer",
+                )
+            )
+            position += 3
+            continue
+
+        actual_count = len(lines[position + 1].split())
+        expected_nodes = declared_count + 1
+        if expected_nodes != actual_count:
+            issues.append(
+                SubmissionStructureIssue(
+                    path=path,
+                    line_number=count_line_number,
+                    vehicle_index=vehicle_index,
+                    declared_count=declared_count,
+                    actual_count=actual_count,
+                    message=(
+                        f"Route node count mismatch for vehicle {vehicle_index}: "
+                        f"expected {expected_nodes}, got {actual_count}; "
+                        f"route line is {route_line_number}"
+                    ),
+                )
+            )
+
+        position += 3
+
+    if position != len(lines):
+        issues.append(
+            SubmissionStructureIssue(
+                path=path,
+                line_number=position + 1,
+                message=f"extra line(s) after expected {vehicle_count} vehicle blocks",
+            )
+        )
+
+    return issues
+
+
+def check_submission_structure(path: Path) -> None:
+    issues = inspect_submission_structure(path)
+    if issues:
+        raise SubmissionStructureError(issues)
+
+
+def repair_submission_structure(path: Path) -> int:
+    lines = path.read_text().splitlines()
+    if not lines:
+        raise SubmissionStructureError([SubmissionStructureIssue(path, 1, "submission file is empty")])
+
+    try:
+        vehicle_count = int(lines[0].strip())
+    except ValueError as exc:
+        raise SubmissionStructureError(
+            [SubmissionStructureIssue(path, 1, "first line must be the vehicle count")]
+        ) from exc
+
+    repaired = 0
+    position = 1
+    for vehicle_index in range(vehicle_count):
+        if position + 2 >= len(lines):
+            raise SubmissionStructureError(
+                [
+                    SubmissionStructureIssue(
+                        path=path,
+                        line_number=position + 1,
+                        vehicle_index=vehicle_index,
+                        message="missing one or more of the 3 required vehicle lines; refusing repair",
+                    )
+                ]
+            )
+
+        try:
+            declared_count = int(lines[position].strip())
+        except ValueError as exc:
+            raise SubmissionStructureError(
+                [
+                    SubmissionStructureIssue(
+                        path=path,
+                        line_number=position + 1,
+                        vehicle_index=vehicle_index,
+                        message="route node count line must be an integer; refusing repair",
+                    )
+                ]
+            ) from exc
+
+        actual_count = len(lines[position + 1].split())
+        repaired_count = max(0, actual_count - 1)
+        if declared_count != repaired_count:
+            lines[position] = str(repaired_count)
+            repaired += 1
+
+        position += 3
+
+    if position != len(lines):
+        raise SubmissionStructureError(
+            [
+                SubmissionStructureIssue(
+                    path=path,
+                    line_number=position + 1,
+                    message=f"extra line(s) after expected {vehicle_count} vehicle blocks; refusing repair",
+                )
+            ]
+        )
+
+    if repaired:
+        path.write_text("\n".join(lines) + "\n")
+    return repaired
 
 
 def solve(
@@ -1011,8 +1177,11 @@ def solve(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="GRASP-style solver for the Street Cleaning problem.")
-    parser.add_argument("input", type=Path, help="input instance file")
+    parser.add_argument("input", nargs="?", type=Path, help="input instance file")
     parser.add_argument("output", nargs="?", type=Path, help="output solution file; omit to write to stdout")
+    output_tools = parser.add_mutually_exclusive_group()
+    output_tools.add_argument("--check-output", type=Path, help="check submission file structure and exit")
+    output_tools.add_argument("--repair-output", type=Path, help="repair route node count lines in a submission file and exit")
     parser.add_argument("--seconds", type=float, default=30.0, help="time budget per instance")
     parser.add_argument("--seed", type=int, default=1, help="base random seed")
     parser.add_argument("--restarts", type=int, default=0, help="fixed number of restarts; 0 means use time budget")
@@ -1025,6 +1194,30 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.check_output is not None:
+        issues = inspect_submission_structure(args.check_output)
+        if issues:
+            for issue in issues:
+                print(issue, file=sys.stderr)
+            return 1
+        if not args.quiet:
+            print(f"structure_ok=True file={args.check_output}", file=sys.stderr)
+        return 0
+
+    if args.repair_output is not None:
+        try:
+            repaired = repair_submission_structure(args.repair_output)
+            check_submission_structure(args.repair_output)
+        except SubmissionStructureError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        if not args.quiet:
+            print(f"structure_ok=True repaired_counts={repaired} file={args.repair_output}", file=sys.stderr)
+        return 0
+
+    if args.input is None:
+        raise SystemExit("input instance is required unless --check-output or --repair-output is used")
+
     instance = parse_instance(args.input)
     solution = solve(
         instance=instance,
