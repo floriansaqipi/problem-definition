@@ -391,6 +391,157 @@ def best_mandatory_insertion(
     return choose_ranked(candidates, rng, top_k, minimize=True)  # type: ignore[return-value]
 
 
+def preferred_vehicle_phases(street: Street) -> List[set[str]]:
+    if street.requirement == 10:
+        return [{"S"}, {"M", "L"}]
+    if street.requirement == 20:
+        return [{"M"}, {"L"}]
+    return [{"L"}]
+
+
+def role_mandatory_insertion_candidates(
+    instance: Instance,
+    cache: PathCache,
+    plans: List[VehiclePlan],
+    street: Street,
+    rng: random.Random,
+    jitter: bool,
+) -> List[Tuple[float, Tuple[int, int, CleanAction]]]:
+    for phase_index, allowed_types in enumerate(preferred_vehicle_phases(street)):
+        candidates: List[Tuple[float, Tuple[int, int, CleanAction]]] = []
+        for vehicle_index, plan in enumerate(plans):
+            if plan.vehicle_type not in allowed_types or not can_vehicle_clean(plan, street):
+                continue
+            for start, end in street.directions():
+                action = CleanAction(street.id, start, end)
+                for position in range(len(plan.actions) + 1):
+                    delta = insertion_delta(instance, cache, plan, action, position)
+                    if math.isinf(delta) or plan.route_time + delta > instance.time_limit:
+                        continue
+
+                    waste = street_waste(instance, street, plan.capacity)
+                    phase_penalty = phase_index * instance.time_limit * 0.20
+                    cost = delta + phase_penalty + waste * 5.0
+                    if jitter:
+                        cost *= rng.uniform(0.98, 1.02)
+                    candidates.append((cost, (vehicle_index, position, action)))
+
+        if candidates:
+            candidates.sort(key=lambda item: item[0])
+            return candidates
+
+    return []
+
+
+def construct_role_mandatory(
+    instance: Instance,
+    cache: PathCache,
+    plans: List[VehiclePlan],
+    rng: random.Random,
+    top_k: int,
+    jitter: bool,
+) -> bool:
+    remaining = [street for street in instance.streets if street.mandatory()]
+
+    while remaining:
+        ranked: List[Tuple[float, Tuple[Street, Tuple[int, int, CleanAction]]]] = []
+        for street in remaining:
+            candidates = role_mandatory_insertion_candidates(instance, cache, plans, street, rng, jitter)
+            if not candidates:
+                continue
+
+            best_cost = candidates[0][0]
+            second_cost = candidates[1][0] if len(candidates) > 1 else best_cost + instance.time_limit
+            regret = second_cost - best_cost
+            standalone = standalone_trip_time(instance, cache, street)
+            hard_to_place_bonus = (standalone if not math.isinf(standalone) else instance.time_limit) * 0.05
+            length_bonus = street.length * 0.01
+            priority = regret + hard_to_place_bonus + length_bonus
+            if jitter:
+                priority *= rng.uniform(0.98, 1.02)
+            ranked.append((priority, (street, candidates[0][1])))
+
+        if not ranked:
+            return False
+
+        street, (vehicle_index, position, action) = choose_ranked(
+            ranked,
+            rng,
+            top_k if jitter else 1,
+            minimize=False,
+        )  # type: ignore[misc]
+        apply_insert(instance, cache, plans[vehicle_index], action, position)
+        remaining = [candidate for candidate in remaining if candidate.id != street.id]
+
+    return True
+
+
+def missing_mandatory_streets(instance: Instance, solution: MaterializedSolution) -> List[Street]:
+    cleaned = {street_id for vehicle in solution.cleaned_by_vehicle for street_id in vehicle}
+    return [street for street in instance.streets if street.mandatory() and street.id not in cleaned]
+
+
+def repair_missing_mandatory(
+    instance: Instance,
+    cache: PathCache,
+    plans: List[VehiclePlan],
+    rng: random.Random,
+    top_k: int,
+) -> bool:
+    for _ in range(len([street for street in instance.streets if street.mandatory()])):
+        solution = materialize_solution(instance, cache, plans)
+        missing = missing_mandatory_streets(instance, solution)
+        if not missing:
+            return True
+
+        repaired = False
+        missing.sort(
+            key=lambda street: (
+                street.requirement,
+                standalone_trip_time(instance, cache, street),
+                street.length,
+            ),
+            reverse=True,
+        )
+
+        for street in missing:
+            candidates = role_mandatory_insertion_candidates(instance, cache, plans, street, rng, jitter=False)
+            if candidates:
+                vehicle_index, position, action = choose_ranked(
+                    [(cost, candidate) for cost, candidate in candidates],
+                    rng,
+                    top_k,
+                    minimize=True,
+                )  # type: ignore[misc]
+                apply_insert(instance, cache, plans[vehicle_index], action, position)
+                repaired = True
+                break
+
+            for vehicle_index, plan in enumerate(plans):
+                if not can_vehicle_clean(plan, street):
+                    continue
+                for start, end in street.directions():
+                    trial = VehiclePlan(plan.vehicle_type, plan.capacity, plan.actions + [CleanAction(street.id, start, end)])
+                    trial.route_time = route_time(instance, cache, trial.actions)
+                    if math.isinf(trial.route_time):
+                        continue
+                    rebuild_plan_nearest(instance, cache, trial, rng, randomized=False)
+                    if trial.route_time <= instance.time_limit:
+                        plan.actions = trial.actions
+                        plan.route_time = trial.route_time
+                        repaired = True
+                        break
+                if repaired:
+                    break
+            if repaired:
+                break
+
+        if not repaired:
+            return False
+
+    return not missing_mandatory_streets(instance, materialize_solution(instance, cache, plans))
+
+
 def possible_optional_gain(instance: Instance, street: Street, capacities: Iterable[int]) -> float:
     best = -math.inf
     for capacity in capacities:
@@ -726,6 +877,7 @@ def construct_solution(
     attempt: int,
     top_k: int,
     max_optional_candidates: int,
+    mandatory_mode: str,
 ) -> Optional[MaterializedSolution]:
     rng = random.Random(seed)
     randomized = attempt > 0
@@ -734,25 +886,43 @@ def construct_solution(
     cleaned: set[int] = set()
     used_opportunistic_mandatory = False
 
-    for street in order_mandatory(instance, cache, rng, randomized):
-        if street.id in cleaned:
-            continue
-        insertion = best_mandatory_insertion(instance, cache, plans, street, rng, active_top_k)
-        if insertion is None:
-            before = set(cleaned)
-            mark_traversed_cleanable(instance, cache, plans, cleaned, mandatory_only=True)
-            if street.id in cleaned:
-                used_opportunistic_mandatory = True
-                continue
-            cleaned = before
+    if mandatory_mode == "role":
+        mandatory_ok = construct_role_mandatory(
+            instance=instance,
+            cache=cache,
+            plans=plans,
+            rng=rng,
+            top_k=max(1, top_k),
+            jitter=True,
+        )
+        if not mandatory_ok:
+            repair_missing_mandatory(instance, cache, plans, rng, max(1, top_k))
             return materialize_solution(instance, cache, plans)
-        vehicle_index, position, action = insertion
-        apply_insert(instance, cache, plans[vehicle_index], action, position)
-        cleaned.add(street.id)
+        repair_missing_mandatory(instance, cache, plans, rng, max(1, top_k))
+        role_solution = materialize_solution(instance, cache, plans)
+        if missing_mandatory_streets(instance, role_solution):
+            return role_solution
+        cleaned = {action.street_id for plan in plans for action in plan.actions}
+    else:
+        for street in order_mandatory(instance, cache, rng, randomized):
+            if street.id in cleaned:
+                continue
+            insertion = best_mandatory_insertion(instance, cache, plans, street, rng, active_top_k)
+            if insertion is None:
+                before = set(cleaned)
+                mark_traversed_cleanable(instance, cache, plans, cleaned, mandatory_only=True)
+                if street.id in cleaned:
+                    used_opportunistic_mandatory = True
+                    continue
+                cleaned = before
+                return materialize_solution(instance, cache, plans)
+            vehicle_index, position, action = insertion
+            apply_insert(instance, cache, plans[vehicle_index], action, position)
+            cleaned.add(street.id)
 
-    missing_mandatory = [street.id for street in instance.streets if street.mandatory() and street.id not in cleaned]
-    if missing_mandatory:
-        return materialize_solution(instance, cache, plans)
+        missing_mandatory = [street.id for street in instance.streets if street.mandatory() and street.id not in cleaned]
+        if missing_mandatory:
+            return materialize_solution(instance, cache, plans)
 
     if not used_opportunistic_mandatory:
         for plan in plans:
@@ -793,7 +963,15 @@ def write_solution(path: Optional[Path], solution: MaterializedSolution) -> None
     path.write_text(text)
 
 
-def solve(instance: Instance, seconds: float, seed: int, restarts: int, top_k: int, max_optional_candidates: int) -> MaterializedSolution:
+def solve(
+    instance: Instance,
+    seconds: float,
+    seed: int,
+    restarts: int,
+    top_k: int,
+    max_optional_candidates: int,
+    mandatory_mode: str = "standard",
+) -> MaterializedSolution:
     cache = PathCache(instance)
     started = time.monotonic()
     best: Optional[MaterializedSolution] = None
@@ -813,6 +991,7 @@ def solve(instance: Instance, seconds: float, seed: int, restarts: int, top_k: i
             attempt=attempt,
             top_k=top_k,
             max_optional_candidates=max_optional_candidates,
+            mandatory_mode=mandatory_mode,
         )
 
         if solution is not None:
@@ -839,6 +1018,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--restarts", type=int, default=0, help="fixed number of restarts; 0 means use time budget")
     parser.add_argument("--top-k", type=int, default=4, help="randomized choice width after the first deterministic run")
     parser.add_argument("--max-optional-candidates", type=int, default=20000, help="cap optional streets considered on large instances")
+    parser.add_argument("--mandatory-mode", choices=["standard", "role"], default="standard", help="mandatory construction strategy")
     parser.add_argument("--quiet", action="store_true", help="suppress summary on stderr")
     return parser.parse_args()
 
@@ -853,6 +1033,7 @@ def main() -> int:
         restarts=args.restarts,
         top_k=max(1, args.top_k),
         max_optional_candidates=max(0, args.max_optional_candidates),
+        mandatory_mode=args.mandatory_mode,
     )
     write_solution(args.output, solution)
 

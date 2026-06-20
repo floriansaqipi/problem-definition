@@ -1,0 +1,5 @@
+approach,run_id,timestamp,input_file,output_file,seed,seconds,restarts,top_k,max_optional_candidates,valid,score,cleaned_count,message,runtime_seconds
+baseline,run_0001_20260620-110900,2026-06-20T11:09:00,training\m.txt,outputs\baseline\run_0001_20260620-110900\m.out,1,1.0,1,1,0,False,0.000000,353,"missing mandatory streets: [6, 44, 62, 65, 91, 93, 115, 130, 148, 162]",0.125
+baseline,run_0001_20260620-110900,2026-06-20T11:09:00,training\train_a.txt,outputs\baseline\run_0001_20260620-110900\train_a.out,1,1.0,1,1,0,True,0.485757,25,valid,0.000
+baseline,run_0001_20260620-110900,2026-06-20T11:09:00,training\train_b.txt,outputs\baseline\run_0001_20260620-110900\train_b.out,1,1.0,1,1,0,True,0.939307,28,valid,0.016
+baseline,run_0001_20260620-110900,2026-06-20T11:09:00,training\train_n.txt,outputs\baseline\run_0001_20260620-110900\train_n.out,1,1.0,1,1,0,True,0.668723,10,valid,0.000

@@ -1,0 +1,2 @@
+approach,run_id,timestamp,input_file,output_file,seed,seconds,restarts,top_k,max_optional_candidates,valid,score,cleaned_count,message,runtime_seconds
+coverage_tuned,run_0001_20260620-112637,2026-06-20T11:26:37,training\m.txt,outputs\coverage_tuned\run_0001_20260620-112637\m.txt,1,60.0,0,8,50000,True,0.717858,502,valid,72.375

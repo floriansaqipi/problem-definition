@@ -1,0 +1,19 @@
+{
+  "approach": "coverage_tuned",
+  "run_id": "run_0001_20260620-112637",
+  "timestamp": "2026-06-20T11:26:37",
+  "seed": 1,
+  "config": {
+    "seconds": 60.0,
+    "restarts": 0,
+    "top_k": 8,
+    "max_optional_candidates": 50000,
+    "mandatory_mode": "role"
+  },
+  "input_dir": "training",
+  "output_root": "outputs",
+  "solution_extension": ".txt",
+  "instances": [
+    "training\\m.txt"
+  ]
+}

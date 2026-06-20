@@ -1,0 +1,2 @@
+approach,run_id,timestamp,input_file,output_file,seed,seconds,restarts,top_k,max_optional_candidates,valid,score,cleaned_count,message,runtime_seconds
+baseline,run_0002_20260620-111215,2026-06-20T11:12:15,training\train_a.txt,outputs\baseline\run_0002_20260620-111215\train_a.txt,1,1.0,1,1,0,True,0.485757,25,valid,0.000

@@ -1,0 +1,19 @@
+{
+  "approach": "grasp",
+  "run_id": "run_0001_20260620-110919",
+  "timestamp": "2026-06-20T11:09:19",
+  "seed": 1,
+  "config": {
+    "seconds": 5.0,
+    "restarts": 0,
+    "top_k": 4,
+    "max_optional_candidates": 20000
+  },
+  "input_dir": "training",
+  "output_root": "outputs",
+  "instances": [
+    "training\\train_a.txt",
+    "training\\train_b.txt",
+    "training\\train_n.txt"
+  ]
+}

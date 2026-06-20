@@ -1,0 +1,20 @@
+{
+  "approach": "baseline",
+  "run_id": "run_0001_20260620-110900",
+  "timestamp": "2026-06-20T11:09:00",
+  "seed": 1,
+  "config": {
+    "seconds": 1.0,
+    "restarts": 1,
+    "top_k": 1,
+    "max_optional_candidates": 0
+  },
+  "input_dir": "training",
+  "output_root": "outputs",
+  "instances": [
+    "training\\m.txt",
+    "training\\train_a.txt",
+    "training\\train_b.txt",
+    "training\\train_n.txt"
+  ]
+}
